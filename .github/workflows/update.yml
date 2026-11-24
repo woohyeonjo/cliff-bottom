@@ -1,0 +1,88 @@
+# 원자료를 받아 신호를 계산하고 GitHub Pages 로 배포한다.
+name: update
+
+on:
+  schedule:
+    # 미국 장 마감(21:00 UTC 전후) 뒤, FRED 가 전날 값을 올린 뒤. 월~토.
+    - cron: "47 22 * * 1-6"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      fetch: ${{ steps.fetch.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 직전 원자료: 어떤 출처가 실패하면 이 값을 대신 쓴다
+      - name: 직전 원자료 불러오기
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw.json
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
+
+      - name: 원자료 받기
+        id: fetch
+        continue-on-error: true
+        run: python fetch_data.py
+
+      - name: 신호 계산
+        run: |
+          {
+            echo "## 신호"
+            echo
+            python signals.py --report
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 원자료 저장
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw.json
+          key: raw-${{ github.run_id }}
+
+      - name: 사이트 만들기
+        run: |
+          mkdir -p _site/data
+          cp index.html _site/
+          cp data/signals.json _site/data/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: 받지 못한 원자료가 있으면 실패로 표시
+        if: needs.build.outputs.fetch == 'failure'
+        run: |
+          echo "일부 원자료를 받지 못해 직전 값을 썼습니다. build 작업의 요약 표를 확인하세요."
+          exit 1
