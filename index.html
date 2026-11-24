@@ -158,6 +158,8 @@ body { margin: 0; }
 .status { font-weight: 600; }
 .status.pending { color: var(--c); }
 .status.muted { color: var(--muted); font-weight: 400; }
+.need { font-size: 0.82rem; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+.need b { flex: none; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; color: var(--c); }
 .avg { font-size: 0.8rem; color: var(--muted); }
 .notice { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; color: var(--muted); }
 .notice.error { border-color: var(--cliff); color: var(--ink); }
@@ -456,6 +458,7 @@ footer a { color: inherit; }
         <h3>${esc(d.name)}</h3>
         <p class="rule">${esc(d.rule)}</p>
         <div class="val">${val}<span class="streak status ${cls}">${txt}</span></div>
+        ${t === LAST && !on && n.need ? `<div class="need"><b>켜지려면</b><span>${esc(n.need)}</span></div>` : ''}
         <svg class="strip" viewBox="0 0 ${N} 10" preserveAspectRatio="none" aria-hidden="true">${runs}<rect x="${t}" y="0" width="3" height="10" fill="var(--ink)"/></svg>
         <div class="strip-axis"><span>${firstYear}</span><span>켜진 기간 ${Math.round(d.freq * 100)}%</span><span>${lastYear}</span></div>
         ${tip}

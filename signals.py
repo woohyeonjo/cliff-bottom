@@ -288,8 +288,88 @@ def judge(s: dict[str, Series], weeks: list[dt.date]) -> tuple[dict[str, list[bo
         "B9": {"yoy": r(mv[mi] / mv[mi - 12] - 1) if mi >= 12 else None, "month": month_of("MARGIN")},
         "B10": {"umcsent": r(uv[ui], 1), "three_months_ago": r(uv[ui - 3], 1) if ui >= 3 else None, "month": month_of("UMCSENT")},
     }
+    # "켜지려면" 문구를 만드는 데 필요한 값
+    now["C1"].update({"spx": r(spx[t], 2), "hi52": r(wmax(spx, t, 52), 2)})
+    now["C6"]["min52"] = r(wmin(claims4, t, 52), 0)
+    now["B1"].update({"spx": r(spx[t], 2), "ath": r(ath[t], 2)})
+    now["B6"]["spike26"] = None if t < 25 or any(v is None for v in c6_raw[t - 25 : t + 1]) else any(c6_raw[t - 25 : t + 1])
     extra = {"spx": spx, "ath": ath, "now": now}
     return raw, extra
+
+
+def need_text(key: str, n: dict) -> str | None:
+    """꺼져 있는 지표가 켜지려면 무엇이 필요한지, 지금 값과 함께 쓴 한 줄.
+
+    숫자는 judge() 의 임계값과 같다. judge() 를 바꾸면 여기도 함께 바꾼다.
+    """
+    def f(v, nd=2, sign=False):
+        return "—" if v is None else f"{'+' if sign and v > 0 else ''}{v:,.{nd}f}"
+    def p(v):
+        return "—" if v is None else f"{'+' if v > 0 else ''}{v * 100:.1f}%"
+    def man(v):
+        return "—" if v is None else f"{v / 10000:.1f}만 건"
+    try:
+        if key == "C1":
+            parts = []
+            if n["dd52"] is not None and n["dd52"] < -0.05:
+                parts.append(f"S&P 500이 {f(n['hi52'] * 0.95, 0)} 이상으로 회복 (지금 {f(n['spx'], 0)}, 52주 고점 대비 {p(n['dd52'])})")
+            if n["breadth_chg26"] is not None and n["breadth_chg26"] >= 0:
+                parts.append(f"RSP/SPY가 26주 전보다 낮아짐 (지금 {p(n['breadth_chg26'])})")
+            return ", 그리고 ".join(parts) or None
+        if key == "C2":
+            return f"XLY/XLP가 26주 전보다 낮아짐 (지금 {p(n['chg26'])})"
+        if key == "C3":
+            return f"금리차 {f(n['min52'] + 0.5)}%p 이상 (지금 {f(n['baa'])}%p)"
+        if key == "C4":
+            if n["min52"] is not None and n["min52"] >= 0:
+                return f"먼저 금리가 역전(0 미만)됐다가 다시 0 이상으로 (52주 최저 {f(n['min52'], 2, True)}%p)"
+            return f"금리차가 0 이상으로 (지금 {f(n['curve'], 2, True)}%p)"
+        if key == "C5":
+            return f"0.50%p 이상 (지금 {f(n['sahm'])}%p)"
+        if key == "C6":
+            return f"4주 평균 {man(n['min52'] * 1.2)} 이상 (지금 {man(n['claims4'])})"
+        if key == "C7":
+            return f"연방기금금리가 26주 전({f(n['dff_26w_ago'])}%)보다 0.25%p 이상 높아짐 (지금 {f(n['dff'])}%)"
+        if key == "C8":
+            return f"NFCI 0 초과 (지금 {f(n['nfci'], 3, True)})"
+        if key == "C9":
+            if n["max_yoy_12m"] is not None and n["max_yoy_12m"] < 0.30:
+                return f"먼저 전년 대비 +30% 이상 급증 (12개월 내 최대 {p(n['max_yoy_12m'])})"
+            return f"6개월 최고치보다 10% 이상 감소 (지금 {p(n['chg_from_6m_high'])})"
+        if key == "C10":
+            return f"전년 대비 -10.0% 이하 (지금 {p(n['yoy'])})"
+        if key == "B1":
+            return f"S&P 500 {f(n['ath'] * 0.8, 0)} 이하, 역대 고점 대비 -20% (지금 {f(n['spx'], 0)}, {p(n['dd_ath'])})"
+        if key == "B2":
+            if n["max13"] is not None and n["max13"] < 30:
+                return f"먼저 VIX 30 이상 (13주 최고 {f(n['max13'])}), 그 뒤 25 미만"
+            return f"VIX 25 미만 (지금 {f(n['vix'])}, 13주 최고 {f(n['max13'])})"
+        if key == "B3":
+            if n["max13"] is not None and n["max13"] <= 1:
+                return f"먼저 VIX/VIX3M 1 초과 (13주 최고 {f(n['max13'], 3)}), 그 뒤 1 미만"
+            return f"VIX/VIX3M 1 미만 (지금 {f(n['ratio'], 3)})"
+        if key == "B4":
+            return f"금리차 {f(n['max26'] - 0.5)}%p 이하 (지금 {f(n['baa'])}%p, 26주 최고 {f(n['max26'])}%p)"
+        if key == "B5":
+            return f"연방기금금리가 26주 전({f(n['dff_26w_ago'])}%)보다 0.25%p 이상 낮아짐 (지금 {f(n['dff'])}%)"
+        if key == "B6":
+            if not n.get("spike26"):
+                return "먼저 최근 26주 안에 청구 급증 (52주 최저의 1.2배 이상)"
+            return f"4주 평균 {man(n['max26'] * 0.9)} 이하 (지금 {man(n['claims4'])})"
+        if key == "B7":
+            return f"13주 최저 대비 +15.0% 이상 (지금 {p(n['from_13w_low'])})"
+        if key == "B8":
+            return f"NFCI {f(n['max26'] - 0.3, 3, True)} 이하 (지금 {f(n['nfci'], 3, True)})"
+        if key == "B9":
+            return f"전년 대비 -20.0% 이하 (지금 {p(n['yoy'])})"
+        if key == "B10":
+            u, b = n["umcsent"], n["three_months_ago"]
+            if u is not None and u >= 60:
+                return f"60 미만으로 (지금 {f(u, 1)})"
+            return f"3개월 전({f(b, 1)})보다 높아짐 (지금 {f(u, 1)})"
+    except (TypeError, KeyError):
+        return None
+    return None
 
 
 def hysteresis(raw: list[bool | None]) -> list[bool]:
@@ -335,6 +415,10 @@ def build(series: dict[str, Series], raw_meta: dict) -> dict:
     cliff = [i["id"] for i in INDICATORS if i["set"] == "cliff"]
     bottom = [i["id"] for i in INDICATORS if i["set"] == "bottom"]
     spx, ath = extra["spx"], extra["ath"]
+    now = extra["now"]
+    for k in now:
+        # 마지막 주에 꺼져 있는 지표만 "켜지려면" 문구를 단다
+        now[k]["need"] = None if on[k][-1] else need_text(k, now[k])
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "raw_generated_at": raw_meta.get("generated_at"),
